@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   MapPin,
@@ -11,64 +11,45 @@ export default function VolunteerMapFeed() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [claimedId, setClaimedId] = useState(null);
+  const [donations, setDonations] = useState([]);
 
   const navigate = (path) => {
     window.history.pushState({}, "", path);
     window.dispatchEvent(new Event("pushstate"));
   };
 
-  const filters = ["All", "Rice/Biryani", "Curries", "Bakery"];
+  const fetchDonations = async () => {
+    try {
+      const res = await fetch("http://localhost:5001/api/listings");
+      const data = await res.json();
+      if (res.ok) {
+        // Map backend schemas to frontend UI models
+        const mapped = data
+          .filter((item) => item.status === "available")
+          .map((item) => ({
+            id: item._id,
+            title: item.title,
+            restaurant: item.postedBy ? item.postedBy.name : "ZeroWaste Partner",
+            area: item.location || "Dhaka",
+            distance: "1.2 km away",
+            expiry: "Expires in 2 hours",
+            urgent: item.weightKg > 4,
+            category: item.category,
+            tags: [item.category, "Fresh", `${item.weightKg} kg`],
+            img: item.imageUrl,
+          }));
+        setDonations(mapped);
+      }
+    } catch (err) {
+      console.error("Error fetching listings:", err);
+    }
+  };
 
-  const donations = [
-    {
-      id: 1,
-      title: "Mutton Biryani - 5kg",
-      restaurant: "Star Restaurant",
-      area: "Dhanmondi",
-      distance: "1.2 km away",
-      expiry: "Expires in 2 hours",
-      urgent: false,
-      category: "Rice/Biryani",
-      tags: ["Hot Food", "Spicy", "Meat"],
-      img: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 2,
-      title: "Chicken Curry & Roti",
-      restaurant: "Bengal Spice Kitchen",
-      area: "Gulshan",
-      distance: "2.8 km away",
-      expiry: "Expires in 45 min",
-      urgent: true,
-      category: "Curries",
-      tags: ["Hot Food", "Halal", "Chicken"],
-      img: "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 3,
-      title: "Assorted Bakery Box",
-      restaurant: "Dhaka Bread Co.",
-      area: "Banani",
-      distance: "3.5 km away",
-      expiry: "Expires in 3 hours",
-      urgent: false,
-      category: "Bakery",
-      tags: ["Veg", "Sweet & Savory", "Bake"],
-      img: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 4,
-      title: "Mixed Vegetable Khichuri",
-      restaurant: "Dhaka Diner",
-      area: "Dhanmondi",
-      distance: "1.5 km away",
-      expiry: "Expires in 1 hour",
-      urgent: true,
-      category: "Rice/Biryani",
-      tags: ["Vegetarian", "Healthy", "Rice"],
-      img: "https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=600&q=80",
-    },
-  ];
+  useEffect(() => {
+    fetchDonations();
+  }, []);
+
+  const filters = ["All", "Rice/Biryani", "Curries", "Bakery"];
 
   const filteredDonations = donations.filter((d) => {
     const matchesFilter = activeFilter === "All" || d.category === activeFilter;
@@ -80,11 +61,25 @@ export default function VolunteerMapFeed() {
     return matchesFilter && matchesQuery;
   });
 
-  const handleClaim = (id) => {
+  const handleClaim = async (id) => {
     setClaimedId(id);
-    setTimeout(() => {
-      navigate("/active-claim");
-    }, 1000);
+    try {
+      const volunteerId = localStorage.getItem("userId");
+      const res = await fetch(`http://localhost:5001/api/listings/${id}/claim`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ claimedBy: volunteerId }),
+      });
+      if (res.ok) {
+        setTimeout(() => {
+          navigate("/active-claim");
+        }, 1000);
+      }
+    } catch (err) {
+      console.error("Error claiming listing:", err);
+    }
   };
 
   return (

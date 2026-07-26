@@ -27,7 +27,9 @@ exports.createListing = async (req, res) => {
 // @access  Public
 exports.getAvailableListings = async (req, res) => {
   try {
-    const listings = await Listing.find({ status: "available" }).populate("postedBy", "name email");
+    const listings = await Listing.find()
+      .populate("postedBy", "name email")
+      .populate("claimedBy", "name email");
     res.json(listings);
   } catch (error) {
     res.status(500).json({ message: error.message });

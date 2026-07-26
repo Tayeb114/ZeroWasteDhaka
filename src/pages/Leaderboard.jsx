@@ -16,21 +16,9 @@ import Sidebar from "../components/Sidebar";
 const VOLUNTEER_AVATAR = "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80";
 const MANAGER_AVATAR = "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=100&q=80";
 
-const VOLUNTEERS = [
-  { rank: 1, name: "Asif Rahman", points: 400 },
-  { rank: 2, name: "Farzana Yesmin", points: 300 },
-  { rank: 3, name: "Tanvir Ahmed", points: 100 },
-];
-
-const RESTAURANTS = [
-  { rank: 1, name: "Kacchi Bhai (Dhanmondi)", points: 500 },
-  { rank: 2, name: "Star Restaurant", points: 200 },
-  { rank: 3, name: "Sultans Dine", points: 100 },
-];
-
 const ROLE_BOARDS = {
-  volunteers: { label: "Top Volunteers", rows: VOLUNTEERS, unit: "delivery points" },
-  restaurants: { label: "Top Restaurants", rows: RESTAURANTS, unit: "donation points" },
+  volunteers: { label: "Top Volunteers", unit: "delivery points" },
+  restaurants: { label: "Top Restaurants", unit: "donation points" },
 };
 
 function RankBadge({ rank }) {
@@ -47,9 +35,35 @@ function RankBadge({ rank }) {
 }
 
 export default function ProfileLeaderboard() {
+  const [volunteers, setVolunteers] = useState([]);
+  const [restaurants, setRestaurants] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLeaderboard = async () => {
+    try {
+      const res = await fetch("http://localhost:5001/api/users/leaderboard");
+      const data = await res.json();
+      if (res.ok) {
+        setVolunteers(data.volunteers.map((v, i) => ({ rank: i + 1, ...v })));
+        setRestaurants(data.restaurants.map((r, i) => ({ rank: i + 1, ...r })));
+      }
+    } catch (err) {
+      console.error("Error fetching leaderboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeaderboard();
+  }, []);
+
   const [viewMode, setViewMode] = useState(localStorage.getItem("role") || "volunteer");
   const [tab, setTab] = useState("volunteers");
-  const board = ROLE_BOARDS[tab];
+
+  const board = tab === "volunteers"
+    ? { label: "Top Volunteers", rows: volunteers, unit: "delivery points" }
+    : { label: "Top Restaurants", rows: restaurants, unit: "donation points" };
 
   useEffect(() => {
     const handleRoleSync = () => {
@@ -71,18 +85,27 @@ export default function ProfileLeaderboard() {
 
   // Profile data for active view
   const isVolunteer = viewMode === "volunteer";
-  const userName = isVolunteer ? "Tanvir Ahmed" : "Rahim Uddin";
+  const userId = localStorage.getItem("userId");
+  const activeUser = isVolunteer 
+    ? volunteers.find((v) => v._id === userId)
+    : restaurants.find((r) => r._id === userId);
+
+  const userName = activeUser ? activeUser.name : (localStorage.getItem("name") || "User");
   const userRole = isVolunteer ? "Volunteer" : "Manager · Star Restaurant";
-  const userRankLabel = isVolunteer ? "Volunteer · Rank #3" : "Manager (Star Restaurant) · Rank #2";
-  const userPoints = isVolunteer ? 100 : 200;
-  const userCompletedCount = isVolunteer ? 1 : 2;
+  const userRankLabel = activeUser 
+    ? `${isVolunteer ? "Volunteer" : "Manager"} · Rank #${activeUser.rank}` 
+    : `${isVolunteer ? "Volunteer" : "Manager"} · Rank #3`;
+  const userPoints = activeUser ? activeUser.points : (parseInt(localStorage.getItem("points") || "0", 10));
+  const userCompletedCount = activeUser 
+    ? (isVolunteer ? activeUser.rescuesCompleted : activeUser.donationsCompleted)
+    : (isVolunteer ? 1 : 2);
   const userCompletedUnit = isVolunteer ? "rescues completed" : "donations completed";
   const userAvatar = isVolunteer ? VOLUNTEER_AVATAR : MANAGER_AVATAR;
 
   // Next rank logic
-  const nextUp = isVolunteer
-    ? VOLUNTEERS.find((v) => v.rank === 2) // Farzana Yesmin (300 pts)
-    : RESTAURANTS.find((r) => r.rank === 1); // Kacchi Bhai (500 pts)
+  const activeUserRank = activeUser ? activeUser.rank : 3;
+  const listToSearch = isVolunteer ? volunteers : restaurants;
+  const nextUp = listToSearch.find((u) => u.rank === activeUserRank - 1) || listToSearch[0];
 
   const gapToNext = nextUp ? nextUp.points - userPoints : 0;
   const actionsToNext = Math.ceil(gapToNext / 100);

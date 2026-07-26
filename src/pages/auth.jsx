@@ -18,45 +18,64 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState("");
+
   const navigate = (path) => {
     window.history.pushState({}, '', path);
     window.dispatchEvent(new Event('pushstate'));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
     
-    // Simulate API request
-    setTimeout(() => {
-      setLoading(false);
-      localStorage.setItem("token", "simulated-jwt-token");
-      if (activeTab === "signin") {
-        // Simple demo routing: volunteers go to map feed, managers go to dashboard
-        if (email.toLowerCase().includes("manager") || email.toLowerCase().includes("rahim")) {
-          localStorage.setItem("role", "manager");
-          localStorage.setItem("name", "Rahim Uddin");
-          navigate("/dashboard");
-        } else {
-          localStorage.setItem("role", "volunteer");
-          localStorage.setItem("name", "Tanvir Ahmed");
-          navigate("/map");
-        }
-      } else {
-        // Registering a new account
-        localStorage.setItem("role", role);
-        localStorage.setItem("name", name || (role === "manager" ? "Rahim Uddin" : "Tanvir Ahmed"));
-        if (role === "volunteer") {
-          navigate("/map");
-        } else {
-          navigate("/dashboard");
-        }
+    try {
+      const url = activeTab === "signin" 
+        ? "http://localhost:5001/api/auth/login" 
+        : "http://localhost:5001/api/auth/register";
+      
+      const payload = activeTab === "signin"
+        ? { email, password }
+        : { name, email, password, role };
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Authentication failed");
       }
-    }, 1200);
+
+      // Save user session in localStorage
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("role", data.role);
+      localStorage.setItem("name", data.name);
+      localStorage.setItem("userId", data._id);
+      localStorage.setItem("points", data.points || 0);
+
+      window.dispatchEvent(new Event("pushstate"));
+
+      if (data.role === "volunteer") {
+        navigate("/map");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 sm:p-6 lg:p-8" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-screen bg-gray-55 flex items-center justify-center p-4 sm:p-6 lg:p-8" style={{ fontFamily: "'Inter', sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap');
         .font-display { font-family: 'Fraunces', serif; }
@@ -84,7 +103,7 @@ export default function AuthPage() {
         {/* TAB SWITCHER */}
         <div className="flex bg-gray-55/70 bg-gray-100/80 rounded-2xl p-1 mb-8 border border-gray-200/30">
           <button
-            onClick={() => setActiveTab("signin")}
+            onClick={() => { setActiveTab("signin"); setError(""); }}
             className={`flex-1 text-xs font-semibold py-3 rounded-xl transition-all duration-200 ${
               activeTab === "signin"
                 ? "bg-white text-emerald-950 shadow-sm"
@@ -94,7 +113,7 @@ export default function AuthPage() {
             Sign In
           </button>
           <button
-            onClick={() => setActiveTab("register")}
+            onClick={() => { setActiveTab("register"); setError(""); }}
             className={`flex-1 text-xs font-semibold py-3 rounded-xl transition-all duration-200 ${
               activeTab === "register"
                 ? "bg-white text-emerald-950 shadow-sm"
@@ -107,6 +126,11 @@ export default function AuthPage() {
 
         {/* FORM CONTAINER */}
         <form onSubmit={handleSubmit} className="space-y-5">
+          {error && (
+            <div className="bg-red-50 text-red-700 border border-red-200 text-xs font-semibold rounded-xl p-3.5 text-center">
+              ⚠️ {error}
+            </div>
+          )}
           {/* Name / Business Name (Registration only) */}
           {activeTab === "register" && (
             <div>

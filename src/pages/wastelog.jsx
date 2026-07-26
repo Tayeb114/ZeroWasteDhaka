@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ChevronDown,
   ArrowDownRight,
@@ -21,13 +21,64 @@ export default function WasteLogAnalytics() {
     disposedAt: "",
   });
   const [saved, setSaved] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [totalWaste, setTotalWaste] = useState(0);
+  const [avoidedLoss, setAvoidedLoss] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const updateForm = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
-  const handleSave = (e) => {
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch("http://localhost:5001/api/waste-logs");
+      const data = await res.json();
+      if (res.ok) {
+        setLogs(data.logs);
+        setTotalWaste(data.totalWaste);
+        setAvoidedLoss(data.avoidedFinancialLoss);
+      }
+    } catch (err) {
+      console.error("Error fetching logs:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setLoading(true);
+    try {
+      const managerId = localStorage.getItem("userId");
+      const res = await fetch("http://localhost:5001/api/waste-logs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          category: form.category,
+          weightKg: parseFloat(form.weight) || 0,
+          disposalDate: form.disposedAt || new Date(),
+          managerId,
+        }),
+      });
+
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+        setForm({
+          category: "Rice/Biryani",
+          weight: "",
+          disposedAt: "",
+        });
+        fetchLogs();
+      }
+    } catch (err) {
+      console.error("Error saving log:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const timeframes = ["Custom Range", "This Week", "This Month", "Last 3 Months"];
@@ -35,21 +86,21 @@ export default function WasteLogAnalytics() {
   const metrics = [
     {
       label: "Latest Log Waste",
-      value: "3 kg",
+      value: logs.length > 0 ? `${logs[logs.length - 1].weightKg} kg` : "0 kg",
       icon: Scale,
-      badge: "↓ 40% vs Previous Entry",
+      badge: "↓ Live entry tracker",
       badgeGood: true,
     },
     {
       label: "Total Waste (Selected Period)",
-      value: "45 kg",
+      value: `${totalWaste} kg`,
       icon: BarChart3,
       badge: null,
       badgeGood: null,
     },
     {
       label: "Avoided Financial Loss",
-      value: "৳7,500",
+      value: `৳${avoidedLoss.toLocaleString()}`,
       icon: Wallet,
       badge: null,
       badgeGood: null,
@@ -57,11 +108,16 @@ export default function WasteLogAnalytics() {
     },
   ];
 
-  const history = [
-    { date: "July 12, 2026", category: "Rice/Biryani", weight: "3.0 kg", status: "Logged Entry" },
-    { date: "July 11, 2026", category: "Curries & Gravies", weight: "2.5 kg", status: "Logged Entry" },
-    { date: "July 10, 2026", category: "Rice/Biryani", weight: "5.0 kg", status: "Logged Entry" },
-  ];
+  const history = logs.map((log) => ({
+    date: new Date(log.disposalDate).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    category: log.category,
+    weight: `${log.weightKg} kg`,
+    status: "Logged Entry",
+  }));
 
   return (
     <div className="h-screen bg-gray-50 text-gray-900 flex overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
