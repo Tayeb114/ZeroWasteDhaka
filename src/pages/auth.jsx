@@ -59,6 +59,7 @@ export default function AuthPage() {
       localStorage.setItem("name", data.name);
       localStorage.setItem("userId", data._id);
       localStorage.setItem("points", data.points || 0);
+      localStorage.setItem("user", JSON.stringify(data));
 
       window.dispatchEvent(new Event("pushstate"));
 

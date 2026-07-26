@@ -69,7 +69,8 @@ export default function ActiveClaimNavigation() {
     setLoading(true);
     try {
       const currentRole = localStorage.getItem("role") || "volunteer";
-      const currentUserId = localStorage.getItem("userId") || "";
+      const user = JSON.parse(localStorage.getItem("user")) || {};
+      const currentUserId = user._id || user.id || localStorage.getItem("userId") || "";
       setRole(currentRole);
       setUserId(currentUserId);
 
@@ -78,13 +79,17 @@ export default function ActiveClaimNavigation() {
       if (res.ok) {
         let filtered = [];
         if (currentRole === "volunteer") {
-          filtered = data.filter(
-            (item) => item.status === "claimed" && item.claimedBy && item.claimedBy._id === currentUserId
-          );
+          filtered = data.filter((item) => {
+            if (item.status !== "claimed" || !item.claimedBy) return false;
+            const claimedId = typeof item.claimedBy === "object" ? item.claimedBy._id : item.claimedBy;
+            return String(claimedId) === String(currentUserId);
+          });
         } else {
-          filtered = data.filter(
-            (item) => item.status === "claimed" && item.postedBy && item.postedBy._id === currentUserId
-          );
+          filtered = data.filter((item) => {
+            if (item.status !== "claimed" || !item.postedBy) return false;
+            const postedId = typeof item.postedBy === "object" ? item.postedBy._id : item.postedBy;
+            return String(postedId) === String(currentUserId);
+          });
         }
         setActiveClaims(filtered);
       }

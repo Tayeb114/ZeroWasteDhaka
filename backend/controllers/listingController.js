@@ -28,8 +28,8 @@ exports.createListing = async (req, res) => {
 exports.getAvailableListings = async (req, res) => {
   try {
     const listings = await Listing.find()
-      .populate("postedBy", "name email")
-      .populate("claimedBy", "name email");
+      .populate("postedBy", "name email role points rescuesCompleted donationsCompleted")
+      .populate("claimedBy", "name email role points rescuesCompleted donationsCompleted");
     res.json(listings);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -54,7 +54,11 @@ exports.claimListing = async (req, res) => {
     listing.claimedBy = claimedBy;
     await listing.save();
 
-    res.json(listing);
+    // Re-fetch with populated fields for consistent response
+    const populated = await Listing.findById(listing._id)
+      .populate("postedBy", "name email role points rescuesCompleted donationsCompleted")
+      .populate("claimedBy", "name email role points rescuesCompleted donationsCompleted");
+    res.json(populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

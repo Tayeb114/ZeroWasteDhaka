@@ -64,7 +64,9 @@ export default function VolunteerMapFeed() {
   const handleClaim = async (id) => {
     setClaimedId(id);
     try {
-      const volunteerId = localStorage.getItem("userId");
+      const user = JSON.parse(localStorage.getItem("user")) || {};
+      const volunteerId = user._id || user.id || localStorage.getItem("userId");
+      
       const res = await fetch(`http://localhost:5001/api/listings/${id}/claim`, {
         method: "PUT",
         headers: {
@@ -73,9 +75,7 @@ export default function VolunteerMapFeed() {
         body: JSON.stringify({ claimedBy: volunteerId }),
       });
       if (res.ok) {
-        setTimeout(() => {
-          navigate("/active-claim");
-        }, 1000);
+        navigate("/active-claim");
       }
     } catch (err) {
       console.error("Error claiming listing:", err);
