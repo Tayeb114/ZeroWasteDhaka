@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Leaf,
   MapPin,
@@ -22,6 +23,10 @@ export default function ZeroWasteDhaka() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
+  
+  const navigate = useNavigate();
+  const isAuthenticated = !!localStorage.getItem("token");
+  const userRole = localStorage.getItem("role");
 
   const navLinks = [
     { label: "Home", href: "#home" },
@@ -57,23 +62,23 @@ export default function ZeroWasteDhaka() {
 
   const features = [
     {
-      title: "Live Route Mapping",
+      title: "Real-Time Food Feed",
       audience: "For Volunteers",
-      desc: "Turn-by-turn pickup routes update in real time, so volunteers reach restaurants before food windows close.",
+      desc: "Browse active surplus food listings nearby across Dhaka, claim donations instantly, and pick up fresh meals before expiry windows close.",
       icon: MapPin,
       img: "https://images.unsplash.com/photo-1522199755839-a2bacb67c546?auto=format&fit=crop&w=800&q=80",
     },
     {
-      title: "Waste Log Analytics",
+      title: "Surplus Food Analytics",
       audience: "For Restaurant Managers",
-      desc: "Automated inventory insights show exactly what's being rescued, when, and where waste patterns start.",
+      desc: "Track your restaurant's total food donations, log waste history, and monitor community impact metrics directly from your dashboard.",
       icon: BarChart3,
       img: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
     },
     {
-      title: "Gamified Leaderboards",
+      title: "Restaurant Leaderboard",
       audience: "For Everyone",
-      desc: "Donation milestones and city-wide rankings turn every rescue into a small, visible act of impact.",
+      desc: "Celebrate Dhaka's top food donor restaurants with live community standings based on total surplus meals rescued.",
       icon: Trophy,
       img: "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=80",
     },
@@ -113,13 +118,30 @@ export default function ZeroWasteDhaka() {
             ))}
           </nav>
 
-          <div className="hidden md:block">
-            <a
-              href="#get-started"
-              className="inline-flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold px-6 py-2.5 shadow-sm shadow-emerald-200 transition-colors"
-            >
-              Get Started
-            </a>
+          <div className="hidden md:flex items-center gap-4">
+            {isAuthenticated ? (
+              <Link
+                to={userRole === "manager" ? "/dashboard" : "/map"}
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold px-6 py-2.5 shadow-sm shadow-emerald-200 transition-colors"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/auth?mode=signin"
+                  className="text-sm font-semibold text-emerald-950 hover:text-emerald-700 transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/auth?mode=register"
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold px-6 py-2.5 shadow-sm shadow-emerald-200 transition-colors"
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -143,12 +165,29 @@ export default function ZeroWasteDhaka() {
                 {link.label}
               </a>
             ))}
-            <a
-              href="#get-started"
-              className="block text-center rounded-full bg-emerald-700 text-white text-sm font-semibold px-6 py-2.5"
-            >
-              Get Started
-            </a>
+            {isAuthenticated ? (
+              <Link
+                to={userRole === "manager" ? "/dashboard" : "/map"}
+                className="block text-center rounded-full bg-emerald-700 text-white text-sm font-semibold px-6 py-2.5"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <Link
+                  to="/auth?mode=signin"
+                  className="block text-center rounded-full border-2 border-emerald-700 text-emerald-800 text-sm font-semibold px-6 py-2.5"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/auth?mode=register"
+                  className="block text-center rounded-full bg-emerald-700 text-white text-sm font-semibold px-6 py-2.5"
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -173,19 +212,19 @@ export default function ZeroWasteDhaka() {
             </p>
 
             <div className="mt-9 flex flex-col sm:flex-row gap-4">
-              <a
-                href="#get-started"
+              <Link
+                to="/auth?mode=register&role=manager"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-7 py-3.5 shadow-lg shadow-amber-200 transition-colors"
               >
-                Join as a Partner
+                Become a Food Donor
                 <ArrowRight className="w-4 h-4" />
-              </a>
-              <a
-                href="#get-started"
+              </Link>
+              <Link
+                to="/auth?mode=register&role=volunteer"
                 className="inline-flex items-center justify-center gap-2 rounded-full border-2 border-emerald-700 text-emerald-800 hover:bg-emerald-50 text-sm font-semibold px-7 py-3.5 transition-colors"
               >
                 Become a Volunteer
-              </a>
+              </Link>
             </div>
 
             <div className="mt-10 flex items-center gap-3">

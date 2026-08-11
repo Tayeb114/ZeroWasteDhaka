@@ -1,11 +1,24 @@
-import React, { useState } from "react";
-import { Leaf, ArrowRight, ArrowLeft, Mail, Lock, User, Info, Building2, MapPin } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Leaf, ArrowRight, ArrowLeft, Mail, Lock, User, Info, Building2, MapPin, Shield, Utensils, Sparkles } from "lucide-react";
 import { API_BASE_URL } from "../config/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function AuthPage() {
-  const [activeTab, setActiveTab] = useState("signin"); // "signin" or "register"
-  const [role, setRole] = useState("volunteer"); // "volunteer" or "manager"
+  const [searchParams] = useSearchParams();
+  const modeParam = searchParams.get("mode");
+  const roleParam = searchParams.get("role");
+
+  const [activeTab, setActiveTab] = useState(modeParam === "register" ? "register" : "signin"); // "signin" or "register"
+  const [role, setRole] = useState(roleParam === "manager" ? "manager" : "volunteer"); // "volunteer" or "manager"
+
+  useEffect(() => {
+    if (modeParam === "register" || modeParam === "signin") {
+      setActiveTab(modeParam);
+    }
+    if (roleParam === "manager" || roleParam === "volunteer") {
+      setRole(roleParam);
+    }
+  }, [modeParam, roleParam]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
