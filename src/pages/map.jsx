@@ -4,41 +4,102 @@ import {
   MapPin,
   Clock,
   CheckCircle,
+  Star,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import { API_BASE_URL } from "../config/api";
+import ReviewsDrawer from "../components/ReviewsDrawer";
+
+const getRemainingTimeText = (dateString) => {
+  if (!dateString) return "Expires in 2 hrs"; // sensible default fallback
+  const expiryDate = new Date(dateString);
+  if (isNaN(expiryDate.getTime())) return "Expires in 2 hrs";
+
+  const diffMs = expiryDate - new Date();
+  if (diffMs <= 0) return "Expired";
+
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMins / 60);
+
+  if (diffHours >= 1) {
+    const remainingMins = diffMins % 60;
+    return remainingMins > 0 
+      ? `Expires in ${diffHours}h ${remainingMins}m` 
+      : `Expires in ${diffHours} hr${diffHours > 1 ? 's' : ''}`;
+  }
+  return `Expires in ${diffMins} min${diffMins > 1 ? 's' : ''}`;
+};
 
 export default function VolunteerMapFeed() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [claimedId, setClaimedId] = useState(null);
   const [donations, setDonations] = useState([]);
+  const [ratings, setRatings] = useState({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
+  const [selectedRestaurantName, setSelectedRestaurantName] = useState("");
 
-  const navigate = (path) => {
-    window.history.pushState({}, "", path);
-    window.dispatchEvent(new Event("pushstate"));
-  };
+  const navigate = useNavigate();
 
   const fetchDonations = async () => {
     try {
-      const res = await fetch("http://localhost:5001/api/listings");
+      const res = await fetch(`${API_BASE_URL}/listings`);
       const data = await res.json();
       if (res.ok) {
         // Map backend schemas to frontend UI models
         const mapped = data
-          .filter((item) => item.status === "available")
-          .map((item) => ({
-            id: item._id,
-            title: item.title,
-            restaurant: item.postedBy ? item.postedBy.name : "ZeroWaste Partner",
-            area: item.location || "Dhaka",
-            distance: "1.2 km away",
-            expiry: "Expires in 2 hours",
-            urgent: item.weightKg > 4,
-            category: item.category,
-            tags: [item.category, "Fresh", `${item.weightKg} kg`],
-            img: item.imageUrl,
-          }));
+          .filter((item) => {
+            if (item.status === "available") return true;
+            if (item.status === "claimed") {
+              const oneHourAgo = Date.now() - 60 * 60 * 1000;
+              return new Date(item.updatedAt || item.claimed_at || Date.now()).getTime() > oneHourAgo;
+            }
+            return false;
+          })
+          .map((item) => {
+            let quantityTag = "N/A";
+            if (item.weightKg && item.itemCount) quantityTag = `${item.weightKg} kg (${item.itemCount} Boxes)`;
+            else if (item.weightKg) quantityTag = `${item.weightKg} kg`;
+            else if (item.itemCount) quantityTag = `${item.itemCount} Items/Boxes`;
+
+            let urgent = false;
+            const expDate = item.expires_at || item.expiryTime || item.expiresAt;
+            if (expDate) {
+              const msLeft = new Date(expDate).getTime() - Date.now();
+              if (msLeft <= 60 * 60 * 1000 && msLeft > 0) urgent = true;
+            }
+
+            const expiryText = getRemainingTimeText(expDate);
+
+            return {
+              id: item._id,
+              status: item.status,
+              title: item.title,
+              restaurant: item.postedBy ? (item.postedBy.restaurantName || item.postedBy.name) : "ZeroWaste Partner",
+              postedById: item.postedBy ? (item.postedBy._id || item.postedBy) : null,
+              area: item.postedBy && item.postedBy.address ? item.postedBy.address : (item.postedBy && item.postedBy.restaurantName ? item.postedBy.restaurantName : item.location || "Dhaka"),
+              expiry: expiryText,
+              urgent: urgent,
+              category: item.category,
+              tags: [item.category, "Fresh", quantityTag],
+              img: item.imageUrl,
+            };
+          });
         setDonations(mapped);
+        
+        // Fetch ratings for unique managers
+        const uniqueManagerIds = [...new Set(mapped.map(m => m.postedById).filter(Boolean))];
+        const ratingsMap = {};
+        await Promise.all(uniqueManagerIds.map(async (id) => {
+          const rRes = await fetch(`${API_BASE_URL}/reviews/user/${id}`);
+          if (rRes.ok) {
+            const rData = await rRes.json();
+            ratingsMap[id] = { avg: rData.averageRating, total: rData.totalReviews };
+          }
+        }));
+        setRatings(ratingsMap);
       }
     } catch (err) {
       console.error("Error fetching listings:", err);
@@ -49,7 +110,8 @@ export default function VolunteerMapFeed() {
     fetchDonations();
   }, []);
 
-  const filters = ["All", "Rice/Biryani", "Curries", "Bakery"];
+  const filters = ["All", "Rice/Biryani", "Curries & Gravies", "Bakery & Bread", "Snacks/Others"];
+  const user = JSON.parse(localStorage.getItem("user")) || {};
 
   const filteredDonations = donations.filter((d) => {
     const matchesFilter = activeFilter === "All" || d.category === activeFilter;
@@ -64,15 +126,14 @@ export default function VolunteerMapFeed() {
   const handleClaim = async (id) => {
     setClaimedId(id);
     try {
-      const user = JSON.parse(localStorage.getItem("user")) || {};
       const volunteerId = user._id || user.id || localStorage.getItem("userId");
       
-      const res = await fetch(`http://localhost:5001/api/listings/${id}/claim`, {
-        method: "PUT",
+      const res = await fetch(`${API_BASE_URL}/claims`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ claimedBy: volunteerId }),
+        body: JSON.stringify({ listing_id: id, receiver_id: volunteerId }),
       });
       if (res.ok) {
         navigate("/active-claim");
@@ -94,7 +155,7 @@ export default function VolunteerMapFeed() {
       {/* MAIN */}
       <div className="flex-1 min-w-0 flex flex-col h-screen overflow-y-auto">
         {/* HEADER */}
-        <header className="bg-white border-b border-gray-200 px-6 lg:px-8 py-5 shrink-0 sticky top-0 z-15">
+        <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md pb-4 pt-2 border-b border-gray-100 px-6 lg:px-8 shrink-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="font-display text-2xl font-semibold text-emerald-950">
@@ -179,12 +240,29 @@ export default function VolunteerMapFeed() {
                         {item.title}
                       </h3>
                     </div>
-                    <p className="text-xs text-gray-500 font-medium">{item.restaurant}</p>
+                    <div className="flex items-center gap-2 mt-0.5 mb-2">
+                      <p className="text-xs text-gray-500 font-medium">{item.restaurant}</p>
+                      {item.postedById && (
+                        <div
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedRestaurantId(item.postedById);
+                            setSelectedRestaurantName(item.restaurant);
+                            setDrawerOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer relative z-10"
+                        >
+                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          {ratings[item.postedById]?.avg > 0 ? ratings[item.postedById].avg : "New"}
+                          <span className="font-normal text-amber-600 ml-0.5">({ratings[item.postedById]?.total || 0})</span>
+                        </div>
+                      )}
+                    </div>
                     
-                    {/* Location Badge */}
                     <div className="flex items-center gap-1.5 text-xs text-gray-600">
                       <MapPin className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>{item.area} &bull; {item.distance}</span>
+                      <span>{item.area}</span>
                     </div>
 
                     {/* Tags */}
@@ -198,34 +276,44 @@ export default function VolunteerMapFeed() {
                   </div>
 
                   {/* Expiration Timer & Button */}
-                  <div className="flex items-center justify-between gap-3 pt-5 mt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between gap-2 pt-3 mt-4 border-t border-gray-100">
                     <span
-                      className={`inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1 ${
-                        item.urgent ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-full whitespace-nowrap truncate ${
+                        item.urgent ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
                       }`}
                     >
-                      <Clock className="w-3 h-3" />
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
                       {item.expiry}
                     </span>
 
-                    <button
-                      onClick={() => handleClaim(item.id)}
-                      disabled={claimedId !== null}
-                      className={`rounded-full text-xs font-semibold px-4.5 py-2.5 transition-colors flex items-center gap-1.5 ${
-                        claimedId === item.id
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
-                      }`}
-                    >
-                      {claimedId === item.id ? (
-                        <>
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          Claimed!
-                        </>
+                    {user.role === 'manager' ? (
+                      item.status === 'available' ? (
+                        <span className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full whitespace-nowrap truncate">
+                          🟢 Seeking Volunteer
+                        </span>
                       ) : (
-                        "Claim Donation"
-                      )}
-                    </button>
+                        <span className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-amber-700 bg-amber-50 rounded-full whitespace-nowrap truncate">
+                          🟡 Claimed
+                        </span>
+                      )
+                    ) : (
+                      <button
+                        onClick={() => handleClaim(item.id)}
+                        disabled={claimedId !== null}
+                        className={`text-[11px] bg-emerald-700 hover:bg-emerald-800 text-white font-medium px-3 py-1.5 rounded-full shadow-sm transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap truncate ${
+                          claimedId === item.id ? "bg-emerald-100 text-emerald-800" : ""
+                        }`}
+                      >
+                        {claimedId === item.id ? (
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                            Claimed!
+                          </>
+                        ) : (
+                          "Claim Donation"
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -239,6 +327,13 @@ export default function VolunteerMapFeed() {
           )}
         </main>
       </div>
+      
+      <ReviewsDrawer 
+        isOpen={drawerOpen} 
+        onClose={() => setDrawerOpen(false)} 
+        restaurantId={selectedRestaurantId} 
+        restaurantName={selectedRestaurantName} 
+      />
     </div>
   );
 }

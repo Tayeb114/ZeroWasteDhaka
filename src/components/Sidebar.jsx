@@ -8,45 +8,30 @@ import {
   Trophy,
   LogOut,
   Map,
+  User,
 } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function Sidebar() {
-  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname;
   const [role, setRole] = useState(localStorage.getItem("role") || "volunteer");
   const [name, setName] = useState(localStorage.getItem("name") || "");
+  const [restaurantName, setRestaurantName] = useState("");
 
   useEffect(() => {
-    const handleLocationChange = () => {
-      const path = window.location.pathname;
-      let currentRole = localStorage.getItem("role") || "volunteer";
-      
-      // Auto-promote role to manager based on manager-specific routes
-      if (path === "/dashboard" || path === "/wastelog") {
-        currentRole = "manager";
-        localStorage.setItem("role", "manager");
-      }
-      
-      setCurrentPath(path);
-      setRole(currentRole);
-      setName(localStorage.getItem("name") || "");
-    };
-
-    window.addEventListener("popstate", handleLocationChange);
-    window.addEventListener("pushstate", handleLocationChange);
-    
-    // Run once on mount to capture initial route role
-    handleLocationChange();
-
-    return () => {
-      window.removeEventListener("popstate", handleLocationChange);
-      window.removeEventListener("pushstate", handleLocationChange);
-    };
-  }, []);
-
-  const navigate = (path) => {
-    window.history.pushState({}, "", path);
-    window.dispatchEvent(new Event("pushstate"));
-  };
+    let currentRole = localStorage.getItem("role") || "volunteer";
+    if (currentPath === "/dashboard" || currentPath === "/wastelog") {
+      currentRole = "manager";
+      localStorage.setItem("role", "manager");
+    }
+    setRole(currentRole);
+    setName(localStorage.getItem("name") || "");
+    const userStr = localStorage.getItem("user");
+    const userObj = userStr ? JSON.parse(userStr) : {};
+    setRestaurantName(localStorage.getItem("restaurantName") || userObj.restaurantName || "Restaurant");
+  }, [currentPath]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -72,12 +57,8 @@ export default function Sidebar() {
 
   const links = role === "manager" ? managerLinks : volunteerLinks;
 
-  const displayName = name || (role === "manager" ? "Rahim Uddin" : "Tanvir Ahmed");
-  const displayRole = role === "manager" ? "Manager · Star Restaurant" : "Volunteer";
-  const displayAvatar =
-    role === "manager"
-      ? "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=100&q=80"
-      : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80";
+  const displayName = name || (role === "manager" ? "Manager" : "Volunteer");
+  const displayRole = role === "manager" ? `Manager · ${restaurantName || 'Restaurant'}` : "Volunteer";
 
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 shrink-0 h-screen sticky top-0">
@@ -112,11 +93,9 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-gray-100">
         <div className="flex items-center gap-3 px-2 py-2">
-          <img
-            src={displayAvatar}
-            alt={`${displayName} profile`}
-            className="w-10 h-10 rounded-full object-cover border border-gray-200"
-          />
+          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 border border-gray-200 shrink-0">
+            <User className="w-5 h-5 text-gray-500" />
+          </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
             <p className="text-xs text-gray-500 truncate">{displayRole}</p>

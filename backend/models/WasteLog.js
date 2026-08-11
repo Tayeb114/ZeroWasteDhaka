@@ -2,13 +2,17 @@ const mongoose = require("mongoose");
 
 const WasteLogSchema = new mongoose.Schema(
   {
-    category: {
+    foodName: {
       type: String,
       required: true,
     },
-    weightKg: {
+    quantity: {
       type: Number,
       required: true,
+    },
+    unit: {
+      type: String,
+      default: "kg",
     },
     disposalDate: {
       type: Date,

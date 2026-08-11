@@ -10,8 +10,17 @@ import {
   LayoutDashboard,
   PlusCircle,
   BarChart3,
+  Star,
+  Edit2,
+  Check,
+  X,
+  MapPin,
+  MessageSquare,
+  User
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
+import ReviewsDrawer from "../components/ReviewsDrawer";
+import { API_BASE_URL } from "../config/api";
 
 const VOLUNTEER_AVATAR = "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80";
 const MANAGER_AVATAR = "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=100&q=80";
@@ -38,14 +47,86 @@ export default function ProfileLeaderboard() {
   const [volunteers, setVolunteers] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [ratings, setRatings] = useState({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
+  const [selectedRestaurantName, setSelectedRestaurantName] = useState("");
+
+  const [viewMode, setViewMode] = useState(localStorage.getItem("role") || "volunteer");
+  const [tab, setTab] = useState("volunteers");
+  const isVolunteer = viewMode === "volunteer";
+
+  // Editable Profile States
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [profileForm, setProfileForm] = useState({ name: "", bio: "", restaurantName: "", address: "" });
+  const [myReviews, setMyReviews] = useState([]);
+
+  const fetchMyProfile = async () => {
+    const uid = localStorage.getItem("userId");
+    if (!uid) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${uid}/profile`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserProfile(data);
+        setProfileForm({
+          name: data.name || "",
+          bio: data.bio || "",
+          restaurantName: data.restaurantName || "",
+          address: data.address || ""
+        });
+      }
+      
+      const rRes = await fetch(`${API_BASE_URL}/reviews/user/${uid}`);
+      if (rRes.ok) {
+        const rData = await rRes.json();
+        setMyReviews(rData.reviews.slice(0, 3));
+      }
+    } catch(err) {
+      console.error("Error fetching profile:", err);
+    }
+  };
+
+  const handleProfileSave = async () => {
+    const uid = localStorage.getItem("userId");
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${uid}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileForm)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserProfile(data);
+        setEditingProfile(false);
+        localStorage.setItem("name", data.name);
+        if (data.restaurantName) localStorage.setItem("restaurantName", data.restaurantName);
+        window.dispatchEvent(new Event("pushstate")); // to update sidebar
+      }
+    } catch (err) {
+      console.error("Error updating profile:", err);
+    }
+  };
 
   const fetchLeaderboard = async () => {
     try {
-      const res = await fetch("http://localhost:5001/api/users/leaderboard");
+      const res = await fetch(`${API_BASE_URL}/users/leaderboard`);
       const data = await res.json();
       if (res.ok) {
         setVolunteers(data.volunteers.map((v, i) => ({ rank: i + 1, ...v })));
-        setRestaurants(data.restaurants.map((r, i) => ({ rank: i + 1, ...r })));
+        const fetchedRestaurants = data.restaurants.map((r, i) => ({ rank: i + 1, ...r }));
+        setRestaurants(fetchedRestaurants);
+        
+        const ratingsMap = {};
+        await Promise.all([...data.volunteers, ...fetchedRestaurants].map(async (u) => {
+          const rRes = await fetch(`${API_BASE_URL}/reviews/user/${u._id}`);
+          if (rRes.ok) {
+            const rData = await rRes.json();
+            ratingsMap[u._id] = { avg: rData.averageRating, total: rData.totalReviews };
+          }
+        }));
+        setRatings(ratingsMap);
       }
     } catch (err) {
       console.error("Error fetching leaderboard:", err);
@@ -56,10 +137,8 @@ export default function ProfileLeaderboard() {
 
   useEffect(() => {
     fetchLeaderboard();
+    fetchMyProfile();
   }, []);
-
-  const [viewMode, setViewMode] = useState(localStorage.getItem("role") || "volunteer");
-  const [tab, setTab] = useState("volunteers");
 
   const board = tab === "volunteers"
     ? { label: "Top Volunteers", rows: volunteers, unit: "delivery points" }
@@ -83,15 +162,13 @@ export default function ProfileLeaderboard() {
     window.dispatchEvent(new Event("pushstate"));
   };
 
-  // Profile data for active view
-  const isVolunteer = viewMode === "volunteer";
   const userId = localStorage.getItem("userId");
   const activeUser = isVolunteer 
     ? volunteers.find((v) => v._id === userId)
     : restaurants.find((r) => r._id === userId);
 
-  const userName = activeUser ? activeUser.name : (localStorage.getItem("name") || "User");
-  const userRole = isVolunteer ? "Volunteer" : "Manager · Star Restaurant";
+  const userName = userProfile ? userProfile.name : (activeUser ? activeUser.name : (localStorage.getItem("name") || "User"));
+  const userRole = isVolunteer ? "Volunteer" : `Manager · ${userProfile?.restaurantName || "Restaurant"}`;
   const userRankLabel = activeUser 
     ? `${isVolunteer ? "Volunteer" : "Manager"} · Rank #${activeUser.rank}` 
     : `${isVolunteer ? "Volunteer" : "Manager"} · Rank #3`;
@@ -102,7 +179,6 @@ export default function ProfileLeaderboard() {
   const userCompletedUnit = isVolunteer ? "rescues completed" : "donations completed";
   const userAvatar = isVolunteer ? VOLUNTEER_AVATAR : MANAGER_AVATAR;
 
-  // Next rank logic
   const activeUserRank = activeUser ? activeUser.rank : 3;
   const listToSearch = isVolunteer ? volunteers : restaurants;
   const nextUp = listToSearch.find((u) => u.rank === activeUserRank - 1) || listToSearch[0];
@@ -119,68 +195,129 @@ export default function ProfileLeaderboard() {
 
       <Sidebar />
 
-      {/* MAIN */}
       <div className="flex-1 min-w-0 flex flex-col h-screen overflow-y-auto">
         <main className="p-6 lg:p-8 flex-1 flex flex-col">
-          {/* HEADER */}
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="font-display text-2xl font-semibold text-emerald-950">Profile &amp; Leaderboard</h1>
-              <p className="mt-1 text-sm text-gray-500">Track rescues and view the community standings.</p>
+              <p className="mt-1 text-sm text-gray-500">Track rescues, update your profile, and view community standings.</p>
             </div>
-
-            {/* ROLE SWITCHER TOGGLE */}
-            <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl p-1.5 shadow-sm self-start sm:self-center">
-              <span className="text-xs font-semibold text-gray-400 pl-2">View Mode:</span>
-              <button
-                onClick={() => handleViewModeChange("volunteer")}
-                className={`text-xs font-medium px-3.5 py-2 rounded-lg transition-all ${
-                  viewMode === "volunteer"
-                    ? "bg-emerald-700 text-white shadow-sm"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-55"
-                }`}
-              >
-                Volunteer
-              </button>
-              <button
-                onClick={() => handleViewModeChange("manager")}
-                className={`text-xs font-medium px-3.5 py-2 rounded-lg transition-all ${
-                  viewMode === "manager"
-                    ? "bg-emerald-700 text-white shadow-sm"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-55"
-                }`}
-              >
-                Restaurant Manager
-              </button>
-            </div>
-          </div>
-
-          {/* RULES / INSTRUCTIONS */}
-          <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 px-5 py-3.5 shadow-sm">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100">
-              <Coins className="h-4.5 w-4.5 text-emerald-700" />
-            </div>
-            <p className="text-sm text-emerald-950">
-              <strong className="font-semibold text-emerald-900">Flat-rate rule:</strong> Every completed rescue awards a flat{" "}
-              <strong className="font-semibold text-emerald-700">+100 pts</strong> to both the restaurant and the volunteer involved. Everyone starts at 0.
-            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[45fr_55fr]">
             {/* LEFT PROFILE COLUMN */}
             <section className="flex flex-col gap-6">
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm relative">
+                {!editingProfile ? (
+                  <button 
+                    onClick={() => setEditingProfile(true)}
+                    className="absolute top-6 right-6 w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="absolute top-6 right-6 flex gap-2">
+                    <button 
+                      onClick={() => setEditingProfile(false)}
+                      className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={handleProfileSave}
+                      className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center hover:bg-emerald-100"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-4">
-                  <img src={userAvatar} alt={userName} className="h-16 w-16 rounded-2xl object-cover ring-4 ring-emerald-50" />
-                  <div>
-                    <h2 className="font-display text-lg font-semibold text-emerald-950">{userName}</h2>
+                  <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-gray-100 border border-gray-200 shrink-0 ring-4 ring-emerald-50">
+                    <User className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <div className="flex-1 min-w-0 pr-12">
+                    {editingProfile ? (
+                      <input 
+                        type="text" 
+                        value={profileForm.name} 
+                        onChange={(e) => setProfileForm(prev => ({...prev, name: e.target.value}))}
+                        className="font-display text-lg font-semibold text-emerald-950 bg-gray-50 border border-gray-200 rounded px-2 py-1 w-full"
+                      />
+                    ) : (
+                      <h2 className="font-display text-lg font-semibold text-emerald-950 truncate">{userName}</h2>
+                    )}
                     <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-100">
                       {userRankLabel}
                     </span>
                   </div>
                 </div>
+                
+                {/* Average Rating Badge */}
+                {userProfile && (
+                  <div className="mt-4 flex items-center gap-2">
+                    <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-lg">
+                      <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <span className="text-sm font-bold text-amber-900">{userProfile.ratingAverage > 0 ? userProfile.ratingAverage : "-"}</span>
+                      <span className="text-xs text-amber-700/70 ml-1">({userProfile.ratingCount} reviews)</span>
+                    </div>
+                  </div>
+                )}
 
-                <div className="mt-6">
+                {/* Editable Fields */}
+                <div className="mt-6 space-y-4">
+                  {!isVolunteer && (
+                    <>
+                      <div>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Restaurant Name</label>
+                        {editingProfile ? (
+                          <input 
+                            type="text" 
+                            value={profileForm.restaurantName} 
+                            onChange={(e) => setProfileForm(prev => ({...prev, restaurantName: e.target.value}))}
+                            className="mt-1 w-full text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                          />
+                        ) : (
+                          <p className="mt-1 text-sm text-gray-900 font-medium">{userProfile?.restaurantName || "Not set"}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Pickup Location (Address)</label>
+                        {editingProfile ? (
+                          <input 
+                            type="text" 
+                            value={profileForm.address} 
+                            onChange={(e) => setProfileForm(prev => ({...prev, address: e.target.value}))}
+                            className="mt-1 w-full text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                          />
+                        ) : (
+                          <div className="mt-1 flex items-start gap-1.5">
+                            <MapPin className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                            <p className="text-sm text-gray-900">{userProfile?.address || JSON.parse(localStorage.getItem("user") || "{}").address || "Location set during posting"}</p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Bio / Description</label>
+                    {editingProfile ? (
+                      <textarea 
+                        value={profileForm.bio} 
+                        onChange={(e) => setProfileForm(prev => ({...prev, bio: e.target.value}))}
+                        rows={3}
+                        className="mt-1 w-full text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 resize-none"
+                      />
+                    ) : (
+                      <p className="mt-1 text-sm text-gray-600 italic">
+                        {userProfile?.bio ? `"${userProfile.bio}"` : "No bio provided."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-5 border-t border-gray-100">
                   <div className="mb-2 flex items-end justify-between">
                     <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Total earned</span>
                     <span className="font-mono text-xs text-gray-600">
@@ -195,33 +332,49 @@ export default function ProfileLeaderboard() {
                 </div>
               </div>
 
+              {/* RECENT FEEDBACK */}
               <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                <h3 className="mb-1 text-sm font-semibold text-emerald-950">How points work</h3>
-                <p className="text-xs leading-relaxed text-gray-500">
-                  Points are earned one rescue at a time — no bonuses, no multipliers. Post a rescue as a
-                  restaurant, or claim and deliver one as a volunteer, and 100 pts land in your account
-                  the moment it's marked complete.
-                </p>
+                <h3 className="mb-4 text-sm font-semibold text-emerald-950 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-600" />
+                  Recent Feedback &amp; Reviews
+                </h3>
+                {myReviews.length === 0 ? (
+                  <p className="text-xs leading-relaxed text-gray-500">
+                    No reviews yet. Complete rescues to receive feedback!
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {myReviews.map(review => (
+                      <div key={review._id} className="border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 border border-gray-200 shrink-0">
+                              <User className="w-3 h-3 text-gray-500" />
+                            </div>
+                            <span className="text-xs font-semibold text-gray-900">{review.reviewer_id?.name || "User"}</span>
+                          </div>
+                          <span className="text-[10px] text-gray-400">{new Date(review.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center gap-0.5 mb-1.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`w-3 h-3 ${i < review.rating ? "text-amber-500 fill-amber-500" : "text-gray-200"}`} />
+                          ))}
+                        </div>
+                        {review.comment && (
+                          <p className="text-xs text-gray-600 leading-relaxed bg-gray-50/50 p-2 rounded">"{review.comment}"</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
             {/* RIGHT LEADERBOARD TABLES */}
             <section className="flex flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="mb-5 flex items-center gap-2 rounded-xl bg-gray-100 p-1">
-                {Object.entries(ROLE_BOARDS).map(([key, { label }]) => (
-                  <button
-                    key={key}
-                    onClick={() => setTab(key)}
-                    className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${tab === key ? "bg-white text-emerald-950 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
               <div className="mb-1 flex items-center justify-between">
-                <h3 className="font-display text-base font-semibold text-emerald-950">{board.label}</h3>
-                <span className="text-xs text-gray-400">ranked by {board.unit}</span>
+                <h3 className="font-display text-base font-semibold text-emerald-950">Top Restaurants</h3>
+                <span className="text-xs text-gray-400">ranked by donation points</span>
               </div>
 
               <div className="mt-3 overflow-hidden rounded-xl border border-gray-200">
@@ -229,15 +382,23 @@ export default function ProfileLeaderboard() {
                   <thead>
                     <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
                       <th className="px-4 py-3 font-semibold">Rank</th>
-                      <th className="px-4 py-3 font-semibold">{tab === "volunteers" ? "Volunteer" : "Restaurant"}</th>
+                      <th className="px-4 py-3 font-semibold">Restaurant Name</th>
                       <th className="px-4 py-3 text-right font-semibold">Points</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {board.rows.map((row) => {
+                    {restaurants.map((row) => {
                       const isCurrentUserRow = row.name === userName;
                       return (
-                        <tr key={row.rank} className={`border-t border-gray-100 ${isCurrentUserRow ? "bg-emerald-50/20" : "hover:bg-gray-50/50"}`}>
+                        <tr 
+                          key={row.rank} 
+                          onClick={() => {
+                            setSelectedRestaurantId(row._id);
+                            setSelectedRestaurantName(row.name);
+                            setDrawerOpen(true);
+                          }}
+                          className={`border-t border-gray-100 cursor-pointer ${isCurrentUserRow ? "bg-emerald-50/20" : "hover:bg-gray-50/50"}`}
+                        >
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-2">
                               <RankBadge rank={row.rank} />
@@ -245,10 +406,18 @@ export default function ProfileLeaderboard() {
                             </div>
                           </td>
                           <td className="px-4 py-3.5 text-sm font-medium text-gray-900">
-                            {row.name}
-                            {isCurrentUserRow && (
-                              <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">You</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {row.name}
+                              {isCurrentUserRow && (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">You</span>
+                              )}
+                              <div
+                                className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold ml-1"
+                              >
+                                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                                {ratings[row._id]?.avg > 0 ? ratings[row._id].avg : "New"}
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3.5 text-right font-mono text-sm font-semibold text-gray-900">
                             {row.points}
@@ -260,21 +429,17 @@ export default function ProfileLeaderboard() {
                   </tbody>
                 </table>
               </div>
-
-              <div className="mt-4 rounded-xl bg-emerald-50/40 border border-emerald-100/50 px-5 py-4">
-                <p className="text-sm text-emerald-950">
-                  <strong className="font-semibold text-emerald-800">Your progress:</strong> You've completed{" "}
-                  <strong className="font-semibold text-emerald-900">{userCompletedCount}</strong> {userCompletedCount === 1 ? (isVolunteer ? "rescue" : "donation") : (isVolunteer ? "rescues" : "donations")} and earned{" "}
-                  <strong className="font-semibold text-emerald-900">{userPoints} pts</strong>.
-                  {nextUp && actionsToNext > 0 && (
-                    <> Complete <strong className="font-semibold text-emerald-900">{actionsToNext} more</strong> ({actionsToNext * 100} pts) to pass {nextUp.name} at {nextUp.points} pts.</>
-                  )}
-                </p>
-              </div>
             </section>
           </div>
         </main>
       </div>
+      
+      <ReviewsDrawer 
+        isOpen={drawerOpen} 
+        onClose={() => setDrawerOpen(false)} 
+        restaurantId={selectedRestaurantId} 
+        restaurantName={selectedRestaurantName} 
+      />
     </div>
   );
 }

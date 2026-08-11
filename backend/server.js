@@ -17,7 +17,9 @@ connectDB();
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/listings", require("./routes/listingRoutes"));
 app.use("/api/waste-logs", require("./routes/wasteLogRoutes"));
-app.use("/api/users/leaderboard", require("./routes/leaderboardRoutes"));
+app.use("/api/users", require("./routes/userRoutes"));
+app.use("/api/claims", require("./routes/claimRoutes")); // Handles POST /api/claims
+app.use("/api/reviews", require("./routes/reviewRoutes")); // Handles /api/reviews
 
 // Root Route
 app.get("/", (req, res) => {

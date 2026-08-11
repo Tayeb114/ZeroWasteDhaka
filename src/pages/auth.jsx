@@ -1,14 +1,7 @@
 import React, { useState } from "react";
-import {
-  Leaf,
-  Mail,
-  Lock,
-  User,
-  Shield,
-  Utensils,
-  ArrowRight,
-  Sparkles,
-} from "lucide-react";
+import { Leaf, ArrowRight, ArrowLeft, Mail, Lock, User, Info, Building2, MapPin } from "lucide-react";
+import { API_BASE_URL } from "../config/api";
+import { useNavigate } from "react-router-dom";
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState("signin"); // "signin" or "register"
@@ -16,14 +9,12 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [restaurantName, setRestaurantName] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [error, setError] = useState("");
 
-  const navigate = (path) => {
-    window.history.pushState({}, '', path);
-    window.dispatchEvent(new Event('pushstate'));
-  };
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,12 +23,12 @@ export default function AuthPage() {
     
     try {
       const url = activeTab === "signin" 
-        ? "http://localhost:5001/api/auth/login" 
-        : "http://localhost:5001/api/auth/register";
+        ? `${API_BASE_URL}/auth/login` 
+        : `${API_BASE_URL}/auth/register`;
       
       const payload = activeTab === "signin"
         ? { email, password }
-        : { name, email, password, role };
+        : { name, email, password, role, restaurantName: role === "manager" ? restaurantName : "" };
 
       const response = await fetch(url, {
         method: "POST",
@@ -59,6 +50,11 @@ export default function AuthPage() {
       localStorage.setItem("name", data.name);
       localStorage.setItem("userId", data._id);
       localStorage.setItem("points", data.points || 0);
+      if (data.restaurantName) {
+        localStorage.setItem("restaurantName", data.restaurantName);
+      } else {
+        localStorage.removeItem("restaurantName");
+      }
       localStorage.setItem("user", JSON.stringify(data));
 
       window.dispatchEvent(new Event("pushstate"));
@@ -204,49 +200,74 @@ export default function AuthPage() {
 
           {/* ROLE SELECTOR CARDS (Registration only) */}
           {activeTab === "register" && (
-            <div className="pt-2">
-              <span className="block text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
-                Select Your Role
-              </span>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Volunteer Card */}
-                <button
-                  type="button"
-                  onClick={() => setRole("volunteer")}
-                  className={`flex flex-col items-start text-left p-4 rounded-2xl border transition-all ${
-                    role === "volunteer"
-                      ? "border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-600"
-                      : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
-                >
-                  <span className={`flex items-center justify-center w-8 h-8 rounded-lg mb-3 ${role === "volunteer" ? "bg-emerald-100 text-emerald-700" : "bg-gray-150 bg-gray-100 text-gray-500"}`}>
-                    <Shield className="w-4 h-4" />
-                  </span>
-                  <span className="text-xs font-bold text-gray-900">Volunteer</span>
-                  <span className="text-[10px] text-gray-400 mt-1 leading-normal">
-                    Claim and rescue surplus food.
-                  </span>
-                </button>
+            <div className="pt-2 space-y-4">
+              <div>
+                <span className="block text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
+                  Select Your Role
+                </span>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Volunteer Card */}
+                  <button
+                    type="button"
+                    onClick={() => setRole("volunteer")}
+                    className={`flex flex-col items-start text-left p-4 rounded-2xl border transition-all ${
+                      role === "volunteer"
+                        ? "border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-600"
+                        : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
+                  >
+                    <span className={`flex items-center justify-center w-8 h-8 rounded-lg mb-3 ${role === "volunteer" ? "bg-emerald-100 text-emerald-700" : "bg-gray-150 bg-gray-100 text-gray-500"}`}>
+                      <Shield className="w-4 h-4" />
+                    </span>
+                    <span className="text-xs font-bold text-gray-900">Volunteer</span>
+                    <span className="text-[10px] text-gray-400 mt-1 leading-normal">
+                      Claim and rescue surplus food.
+                    </span>
+                  </button>
 
-                {/* Manager Card */}
-                <button
-                  type="button"
-                  onClick={() => setRole("manager")}
-                  className={`flex flex-col items-start text-left p-4 rounded-2xl border transition-all ${
-                    role === "manager"
-                      ? "border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-600"
-                      : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
-                >
-                  <span className={`flex items-center justify-center w-8 h-8 rounded-lg mb-3 ${role === "manager" ? "bg-emerald-100 text-emerald-700" : "bg-gray-150 bg-gray-100 text-gray-500"}`}>
-                    <Utensils className="w-4 h-4" />
-                  </span>
-                  <span className="text-xs font-bold text-gray-900">Manager</span>
-                  <span className="text-[10px] text-gray-400 mt-1 leading-normal">
-                    Log and donate food surplus.
-                  </span>
-                </button>
+                  {/* Manager Card */}
+                  <button
+                    type="button"
+                    onClick={() => setRole("manager")}
+                    className={`flex flex-col items-start text-left p-4 rounded-2xl border transition-all ${
+                      role === "manager"
+                        ? "border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-600"
+                        : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
+                  >
+                    <span className={`flex items-center justify-center w-8 h-8 rounded-lg mb-3 ${role === "manager" ? "bg-emerald-100 text-emerald-700" : "bg-gray-150 bg-gray-100 text-gray-500"}`}>
+                      <Utensils className="w-4 h-4" />
+                    </span>
+                    <span className="text-xs font-bold text-gray-900">Manager</span>
+                    <span className="text-[10px] text-gray-400 mt-1 leading-normal">
+                      Log and donate food surplus.
+                    </span>
+                  </button>
+                </div>
               </div>
+
+              {/* Dynamic Restaurant Name input field for Manager */}
+              {role === "manager" && (
+                <div>
+                  <label htmlFor="restaurant-name-input" className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                    RESTAURANT / BUSINESS NAME
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
+                      <Utensils className="w-[18px] h-[18px]" />
+                    </span>
+                    <input
+                      id="restaurant-name-input"
+                      type="text"
+                      required
+                      placeholder="e.g., Dhaka Restaurant, Kacchi Bhai"
+                      value={restaurantName}
+                      onChange={(e) => setRestaurantName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-emerald-700 transition-all text-gray-900 font-medium"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

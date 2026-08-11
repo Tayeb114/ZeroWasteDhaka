@@ -8,11 +8,17 @@ const ListingSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      required: true,
+      default: "General",
+    },
+    instructions: {
+      type: String,
+      default: "",
     },
     weightKg: {
       type: Number,
-      required: true,
+    },
+    itemCount: {
+      type: Number,
     },
     location: {
       type: String,
@@ -24,8 +30,12 @@ const ListingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["available", "claimed", "completed"],
+      enum: ["available", "claimed", "completed", "archived", "expired"],
       default: "available",
+    },
+    expires_at: {
+      type: Date,
+      default: () => Date.now() + 4 * 60 * 60 * 1000,
     },
     postedBy: {
       type: mongoose.Schema.Types.ObjectId,

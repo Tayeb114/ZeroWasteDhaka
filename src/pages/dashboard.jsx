@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   Timer,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import { API_BASE_URL } from "../config/api";
 
 export default function RestaurantManagerDashboard() {
   const [activeNav, setActiveNav] = useState("Overview Dashboard");
@@ -28,8 +30,11 @@ export default function RestaurantManagerDashboard() {
   });
 
   const [form, setForm] = useState({
-    category: "Rice/Biryani",
-    weight: "",
+    title: "",
+    category: "",
+    pickupLocation: JSON.parse(localStorage.getItem("user") || "{}").address || "",
+    weightKg: "",
+    itemCount: "",
     servings: "",
     preparedAt: "",
     expiryTime: "",
@@ -37,35 +42,51 @@ export default function RestaurantManagerDashboard() {
     instructions: "",
   });
 
-  const navigate = (path) => {
-    window.history.pushState({}, '', path);
-    window.dispatchEvent(new Event('pushstate'));
-  };
+  const navigate = useNavigate();
 
   const updateForm = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
+  const handleTitleChange = (e) => {
+    const value = e.target.value;
+    updateForm("title", value);
+    
+    const lowerTitle = value.toLowerCase();
+    if (lowerTitle.includes("soup") || lowerTitle.includes("curry") || lowerTitle.includes("dal")) {
+      updateForm("category", "Curries, Gravies & Soups");
+    } else if (lowerTitle.includes("biryani") || lowerTitle.includes("kacchi") || lowerTitle.includes("rice")) {
+      updateForm("category", "Rice & Biryani");
+    }
+  };
+
   const fetchListings = async () => {
     try {
-      const response = await fetch("http://localhost:5001/api/listings");
+      const response = await fetch(`${API_BASE_URL}/listings`);
       const data = await response.json();
       if (response.ok) {
         const managerId = localStorage.getItem("userId");
-        const managerListings = data.filter(
-          (item) => item.postedBy && item.postedBy._id === managerId && item.status !== "completed"
-        );
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const managerListings = data.filter((item) => {
+          if (!item.postedBy || item.postedBy._id !== managerId) return false;
+          if (item.status === "available") return true;
+          if (item.status === "claimed" || item.status === "completed") {
+            return new Date(item.updatedAt) >= twentyFourHoursAgo;
+          }
+          return false;
+        });
+        
         setActiveListings(managerListings);
 
-        const wasteRes = await fetch("http://localhost:5001/api/waste-logs");
-        const wasteData = await wasteRes.json();
+        const wasteRes = await fetch(`${API_BASE_URL}/waste-logs`);
+        const wasteData = await wasteRes.ok ? await wasteRes.json() : { logs: [] };
         const managerWaste = wasteRes.ok 
           ? wasteData.logs.filter((log) => log.managerId && log.managerId._id === managerId).reduce((sum, log) => sum + log.weightKg, 0)
           : 0;
 
         const completedRescues = data.filter(
           (item) => item.postedBy && item.postedBy._id === managerId && item.status === "completed"
-        ).reduce((sum, item) => sum + item.weightKg, 0);
+        ).reduce((sum, item) => sum + (item.weightKg || 0), 0);
 
-        const userRes = await fetch("http://localhost:5001/api/users/leaderboard");
+        const userRes = await fetch(`${API_BASE_URL}/users/leaderboard`);
         const userLeaderboard = await userRes.json();
         let points = localStorage.getItem("points") || 0;
         if (userRes.ok) {
@@ -105,39 +126,62 @@ export default function RestaurantManagerDashboard() {
 
   const handlePublish = async (e) => {
     e.preventDefault();
+    if (!form.title || !form.category || !form.pickupLocation || !form.expiryTime) {
+      alert("Please fill in Food Title, Category, Pickup Location, and Expiry Time before posting.");
+      return;
+    }
+    
     setLoading(true);
     try {
       const managerId = localStorage.getItem("userId");
       const fallbackImg = "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=600&q=80";
       const finalImg = imageUrl || fallbackImg;
 
-      const res = await fetch("http://localhost:5001/api/listings", {
+      const res = await fetch(`${API_BASE_URL}/listings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          title: `${form.category} (${form.weight}kg)`,
+          title: form.title,
           category: form.category,
-          weightKg: parseFloat(form.weight) || 0,
-          location: "Star Restaurant, Dhanmondi 27",
+          weightKg: form.weightKg ? parseFloat(form.weightKg) : null,
+          itemCount: form.itemCount ? parseFloat(form.itemCount) : null,
+          address: form.pickupLocation,
           imageUrl: finalImg,
           postedBy: managerId,
+          instructions: form.instructions,
+          expires_at: form.expiryTime ? (() => {
+            const d = new Date();
+            const [h, m] = form.expiryTime.split(':');
+            d.setHours(h, m, 0);
+            return d.toISOString();
+          })() : undefined,
         }),
       });
 
       if (res.ok) {
         setJustPublished(true);
         setTimeout(() => setJustPublished(false), 3000);
-        setForm({
-          category: "Rice/Biryani",
-          weight: "",
+        setForm((prev) => ({
+          ...prev,
+          title: "",
+          category: "",
+          weightKg: "",
+          itemCount: "",
           servings: "",
           preparedAt: "",
           expiryTime: "",
           packaging: "Boxed",
           instructions: "",
-        });
+        }));
+        
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+          const userObj = JSON.parse(userStr);
+          userObj.address = form.pickupLocation;
+          localStorage.setItem("user", JSON.stringify(userObj));
+        }
         setImageUrl("");
         fetchListings();
       }
@@ -150,7 +194,7 @@ export default function RestaurantManagerDashboard() {
 
   const handleComplete = async (listingId) => {
     try {
-      const res = await fetch(`http://localhost:5001/api/listings/${listingId}/complete`, {
+      const res = await fetch(`${API_BASE_URL}/listings/${listingId}/complete`, {
         method: "PUT",
       });
       if (res.ok) {
@@ -163,8 +207,8 @@ export default function RestaurantManagerDashboard() {
 
   const kpis = [
     {
-      label: "Total Food Rescued",
-      value: `${kpiData.totalRescued} kg`,
+      label: "Total Food Rescued (kg)",
+      value: `${kpiData.totalRescued}`,
       icon: Package,
       trend: "+12.4% this month",
       trendPositive: true,
@@ -200,6 +244,11 @@ export default function RestaurantManagerDashboard() {
     { name: "Dry Food", img: "https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=200&q=80" },
   ];
 
+  const userStr = localStorage.getItem("user");
+  const userObj = userStr ? JSON.parse(userStr) : {};
+  const userName = localStorage.getItem("name") || userObj.name || "Manager";
+  const restaurantName = localStorage.getItem("restaurantName") || userObj.restaurantName || "Restaurant";
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 flex" style={{ fontFamily: "'Inter', sans-serif" }}>
       <style>{`
@@ -213,33 +262,24 @@ export default function RestaurantManagerDashboard() {
         <header className="bg-white border-b border-gray-200 px-6 lg:px-8 h-20 flex items-center justify-between sticky top-0 z-30">
           <div>
             <h1 className="font-display text-xl sm:text-2xl font-semibold text-emerald-950">
-              Welcome Back, Manager!
+              Welcome Back, {userName}!
             </h1>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              {new Date().toLocaleDateString("en-US", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 flex items-center gap-2">
+              <span className="font-medium text-emerald-800">
+                {restaurantName} • Manager Dashboard
+              </span>
+              <span>•</span>
+              <span>
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button className="relative w-10 h-10 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
-              <Bell className="w-[18px] h-[18px] text-gray-500" />
-              <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">
-                3
-              </span>
-            </button>
-            <a
-              href="#post-surplus"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold px-5 py-2.5 shadow-sm shadow-emerald-100 transition-colors"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Post Surplus Food
-            </a>
-          </div>
         </header>
 
         <main className="p-6 lg:p-8 space-y-8">
@@ -289,38 +329,88 @@ export default function RestaurantManagerDashboard() {
 
               <form onSubmit={handlePublish} className="space-y-5 flex-1 flex flex-col justify-between">
                 <div className="space-y-5">
+                  {/* Food Title / Item Name Input */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-2">Food Category</label>
-                    <div className="flex gap-3 overflow-x-auto pb-2">
-                      {foodCategories.map((c) => (
-                        <button
-                          type="button"
-                          key={c.name}
-                          onClick={() => updateForm("category", c.name)}
-                          className={`shrink-0 rounded-xl overflow-hidden border-2 transition-colors ${
-                            form.category === c.name ? "border-emerald-600" : "border-transparent"
-                          }`}
-                        >
-                          <img src={c.img} alt={c.name} className="w-16 h-16 object-cover" />
-                        </button>
-                      ))}
+                    <label htmlFor="food-title-input" className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                      Food Title / Item Name *
+                    </label>
+                    <input
+                      id="food-title-input"
+                      type="text"
+                      required
+                      placeholder="Enter food title or item name"
+                      value={form.title}
+                      onChange={handleTitleChange}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium text-gray-900"
+                    />
+                  </div>
+
+                  {/* Category Selection Dropdown */}
+                  <div>
+                    <label htmlFor="food-category-select" className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                      Category *
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="food-category-select"
+                        required
+                        value={form.category}
+                        onChange={(e) => updateForm("category", e.target.value)}
+                        className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-55 bg-gray-50 px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+                      >
+                        <option value="" disabled>-- Select Food Category --</option>
+                        <option value="Rice & Biryani">Rice & Biryani</option>
+                        <option value="Curries, Gravies & Soups">Curries, Gravies & Soups</option>
+                        <option value="Bakery, Breads & Sweets">Bakery, Breads & Sweets</option>
+                        <option value="Packaged / Snacks / Others">Packaged / Snacks / Others</option>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
+                  </div>
+
+                  {/* Pickup Location Input */}
+                  <div>
+                    <label htmlFor="pickup-location-input" className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                      Pickup Location (Address) *
+                    </label>
+                    <input
+                      id="pickup-location-input"
+                      type="text"
+                      required
+                      placeholder="Enter pickup location address"
+                      value={form.pickupLocation}
+                      onChange={(e) => updateForm("pickupLocation", e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium text-gray-900"
+                    />
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-2">Weight (kg)</label>
+                      <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wider">WEIGHT (KG)</label>
                       <input
                         type="number"
                         min="0"
                         step="0.1"
-                        required
-                        value={form.weight}
-                        onChange={(e) => updateForm("weight", e.target.value)}
-                        placeholder="e.g. 5"
+                        value={form.weightKg}
+                        onChange={(e) => updateForm("weightKg", e.target.value)}
+                        placeholder=""
                         className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wider">ITEM / BOX COUNT</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.itemCount}
+                        onChange={(e) => updateForm("itemCount", e.target.value)}
+                        placeholder=""
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-2">Estimated Servings</label>
                       <input
@@ -328,13 +418,10 @@ export default function RestaurantManagerDashboard() {
                         min="0"
                         value={form.servings}
                         onChange={(e) => updateForm("servings", e.target.value)}
-                        placeholder="e.g. 20"
+                        placeholder=""
                         className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-2">Prepared At</label>
                       <input
@@ -398,7 +485,7 @@ export default function RestaurantManagerDashboard() {
                       rows={3}
                       value={form.instructions}
                       onChange={(e) => updateForm("instructions", e.target.value)}
-                      placeholder="e.g. Use the back kitchen entrance, ask for the shift supervisor Rahim Uddin."
+                      placeholder=""
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
                     />
                   </div>
@@ -435,7 +522,7 @@ export default function RestaurantManagerDashboard() {
                 <span className="text-xs font-semibold text-gray-400">Live tracking</span>
               </div>
 
-              <div className="space-y-4 flex-1 overflow-y-auto max-h-[500px] pr-1">
+              <div className="space-y-4 flex-1 max-h-[550px] overflow-y-auto pr-2 custom-scrollbar">
                 {activeListings.map((item) => (
                   <div
                     key={item._id}

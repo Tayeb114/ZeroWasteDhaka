@@ -11,9 +11,9 @@ const volunteersData = [
 ];
 
 const managersData = [
-  { name: "Kacchi Bhai (Dhanmondi)", email: "kacchi@example.com", password: "password123", role: "manager", points: 500, donationsCompleted: 5 },
-  { name: "Rahim Uddin", email: "rahim@example.com", password: "password123", role: "manager", points: 200, donationsCompleted: 2 },
-  { name: "Sultans Dine", email: "sultans@example.com", password: "password123", role: "manager", points: 100, donationsCompleted: 1 },
+  { name: "Kacchi Bhai (Dhanmondi)", email: "kacchi@example.com", password: "password123", role: "manager", restaurantName: "Kacchi Bhai (Dhanmondi)", points: 500, donationsCompleted: 5 },
+  { name: "Rahim Uddin", email: "rahim@example.com", password: "password123", role: "manager", restaurantName: "Star Restaurant", points: 200, donationsCompleted: 2 },
+  { name: "Sultans Dine", email: "sultans@example.com", password: "password123", role: "manager", restaurantName: "Sultan's Dine", points: 100, donationsCompleted: 1 },
 ];
 
 const seedDatabase = async () => {
@@ -38,12 +38,12 @@ const seedDatabase = async () => {
     const rahim = managers.find((m) => m.email === "rahim@example.com");
     const kacchi = managers.find((m) => m.email === "kacchi@example.com");
 
-    // Seed food listings
     const sampleListings = [
       {
         title: "Mutton Biryani - 5kg",
         category: "Rice/Biryani",
         weightKg: 5,
+        itemCount: 2,
         location: "Dhanmondi",
         imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=600&q=80",
         status: "available",
@@ -52,13 +52,37 @@ const seedDatabase = async () => {
       {
         title: "Chicken Curry & Roti",
         category: "Curries",
-        weightKg: 3,
+        weightKg: 3.5,
         location: "Gulshan",
         imageUrl: "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80",
         status: "available",
         postedBy: kacchi._id,
       },
     ];
+
+    const sampleWasteLogs = [
+      {
+        foodName: "Spoiled Rice",
+        quantity: 2,
+        unit: "kg",
+        managerId: rahim._id,
+      },
+      {
+        foodName: "Leftover Curry",
+        quantity: 1.5,
+        unit: "Liters",
+        managerId: kacchi._id,
+      },
+      {
+        foodName: "Stale Bread",
+        quantity: 5,
+        unit: "Pieces",
+        managerId: kacchi._id,
+      },
+    ];
+
+    await WasteLog.create(sampleWasteLogs);
+    console.log(`Seeded ${sampleWasteLogs.length} waste logs.`);
 
     const listings = await Listing.create(sampleListings);
     console.log(`Seeded ${listings.length} available food listings.`);

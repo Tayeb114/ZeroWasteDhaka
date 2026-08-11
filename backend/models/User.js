@@ -22,6 +22,26 @@ const UserSchema = new mongoose.Schema(
       enum: ["volunteer", "manager"],
       required: true,
     },
+    restaurantName: {
+      type: String,
+      default: "",
+    },
+    bio: {
+      type: String,
+      default: "",
+    },
+    address: {
+      type: String,
+      default: "",
+    },
+    ratingAverage: {
+      type: Number,
+      default: 5.0,
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+    },
     points: {
       type: Number,
       default: 0,
