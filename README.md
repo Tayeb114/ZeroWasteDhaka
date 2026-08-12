@@ -81,4 +81,4 @@ Install the packages and run the Vite server:
 npm install
 npm run dev
 ```
-The application will run at http://localhost:5173/ by default.
+The application will run at https://zerowaste-psi-three.vercel.app/wastelog by default.
