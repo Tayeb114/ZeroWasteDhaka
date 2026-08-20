@@ -40,6 +40,7 @@ export default function RestaurantManagerDashboard() {
     expiryTime: "",
     packaging: "Boxed",
     instructions: "",
+    contactNumber: "",
   });
 
   const navigate = useNavigate();
@@ -76,10 +77,10 @@ export default function RestaurantManagerDashboard() {
         
         setActiveListings(managerListings);
 
-        const wasteRes = await fetch(`${API_BASE_URL}/waste-logs`);
+        const wasteRes = await fetch(`${API_BASE_URL}/waste-logs?managerId=${managerId}`);
         const wasteData = await wasteRes.ok ? await wasteRes.json() : { logs: [] };
         const managerWaste = wasteRes.ok 
-          ? wasteData.logs.filter((log) => log.managerId && log.managerId._id === managerId).reduce((sum, log) => sum + log.weightKg, 0)
+          ? wasteData.logs.reduce((sum, log) => sum + (log.quantity || 0), 0)
           : 0;
 
         const completedRescues = data.filter(
@@ -150,7 +151,7 @@ export default function RestaurantManagerDashboard() {
           address: form.pickupLocation,
           imageUrl: finalImg,
           postedBy: managerId,
-          instructions: form.instructions,
+          instructions: `${form.instructions}\nContact Number: ${form.contactNumber}`.trim(),
           expires_at: form.expiryTime ? (() => {
             const d = new Date();
             const [h, m] = form.expiryTime.split(':');
@@ -174,6 +175,7 @@ export default function RestaurantManagerDashboard() {
           expiryTime: "",
           packaging: "Boxed",
           instructions: "",
+          contactNumber: "",
         }));
         
         const userStr = localStorage.getItem("user");
@@ -356,7 +358,7 @@ export default function RestaurantManagerDashboard() {
                         required
                         value={form.category}
                         onChange={(e) => updateForm("category", e.target.value)}
-                        className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-55 bg-gray-50 px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+                        className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
                       >
                         <option value="" disabled>-- Select Food Category --</option>
                         <option value="Rice & Biryani">Rice & Biryani</option>
@@ -380,6 +382,22 @@ export default function RestaurantManagerDashboard() {
                       placeholder="Enter pickup location address"
                       value={form.pickupLocation}
                       onChange={(e) => updateForm("pickupLocation", e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium text-gray-900"
+                    />
+                  </div>
+
+                  {/* Contact Number Input */}
+                  <div>
+                    <label htmlFor="contact-number-input" className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                      Contact Number *
+                    </label>
+                    <input
+                      id="contact-number-input"
+                      type="text"
+                      required
+                      placeholder="e.g. +88017XXXXXXXX"
+                      value={form.contactNumber}
+                      onChange={(e) => updateForm("contactNumber", e.target.value)}
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium text-gray-900"
                     />
                   </div>

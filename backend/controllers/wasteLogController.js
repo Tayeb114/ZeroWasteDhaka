@@ -25,7 +25,9 @@ exports.createWasteLog = async (req, res) => {
 // @access  Public
 exports.getWasteLogs = async (req, res) => {
   try {
-    const logs = await WasteLog.find().sort({ disposalDate: -1 }).populate("managerId", "name");
+    const { managerId } = req.query;
+    const filter = managerId ? { managerId } : {};
+    const logs = await WasteLog.find(filter).sort({ disposalDate: -1 }).populate("managerId", "name");
 
     // Avoided Financial Loss corresponds to completed rescues * standard value multiplier (e.g. ৳250 / kg)
     const completedListings = await Listing.find({ status: "completed" });

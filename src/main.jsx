@@ -6,7 +6,7 @@ import RestaurantManagerDashboard from './pages/dashboard.jsx'
 import VolunteerMapFeed from './pages/map.jsx'
 import WasteLogAnalytics from './pages/wastelog.jsx'
 import ActiveClaimNavigation from './pages/active-claim.jsx'
-import ProfileLeaderboard from './pages/leaderboard.jsx'
+import ProfileLeaderboard from './pages/Leaderboard.jsx'
 import AuthPage from './pages/auth.jsx'
 import './index.css'
 

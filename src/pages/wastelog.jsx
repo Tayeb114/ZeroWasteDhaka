@@ -36,7 +36,8 @@ export default function WasteLogAnalytics() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/waste-logs`);
+      const managerId = localStorage.getItem("userId");
+      const res = await fetch(`${API_BASE_URL}/waste-logs?managerId=${managerId}`);
       const data = await res.json();
       if (res.ok) {
         setLogs(data.logs);

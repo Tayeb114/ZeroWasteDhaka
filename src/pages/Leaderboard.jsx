@@ -388,13 +388,13 @@ export default function ProfileLeaderboard() {
                   </thead>
                   <tbody>
                     {restaurants.map((row) => {
-                      const isCurrentUserRow = row.name === userName;
+                      const isCurrentUserRow = row._id === userId;
                       return (
                         <tr 
                           key={row.rank} 
                           onClick={() => {
                             setSelectedRestaurantId(row._id);
-                            setSelectedRestaurantName(row.name);
+                            setSelectedRestaurantName(row.restaurantName || row.name);
                             setDrawerOpen(true);
                           }}
                           className={`border-t border-gray-100 cursor-pointer ${isCurrentUserRow ? "bg-emerald-50/20" : "hover:bg-gray-50/50"}`}
@@ -407,7 +407,7 @@ export default function ProfileLeaderboard() {
                           </td>
                           <td className="px-4 py-3.5 text-sm font-medium text-gray-900">
                             <div className="flex items-center gap-2">
-                              {row.name}
+                              {row.restaurantName || row.name}
                               {isCurrentUserRow && (
                                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">You</span>
                               )}
